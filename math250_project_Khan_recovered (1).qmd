@@ -1,0 +1,191 @@
+---
+title: "Does Money Buy Fear? An Exploration of Budget, Revenue, and Popularity in Horror Cinema"
+author: "Daulath Khan"
+format: html
+embed-resources: true
+---
+
+```{r}
+#| message: false
+#| warning: false
+library(tidyverse)
+library(gt)
+```
+
+## Introduction
+
+Horror films occupy a uniquely resilient position in cinema history: they are among the cheapest to produce yet most reliably profitable of any genre. From the shadowy expressionism of Nosferatu (1922) to the social allegories of Get Out (2017), horror has always functioned as a mirror for the anxieties of its time. As film scholar Robin Wood argued, "the true subject of the horror genre is the struggle for recognition of all that our civilization represses or oppresses"[^1]. The monsters of any era, in other words, tend to embody whatever a society most fears or most wants to deny. But, this poses the question: how much does it really take to produce a horror movie? Interestingly, what makes horror economically distinctive is how little money it needs to work. Unlike action blockbusters that depend on visual spectacle, horror thrives on withholding information; ensuing some sort of closed door, a strange sound, maybe even a lingering shodow. In retrospect, these cost almost nothing to film. Friday the 13th (1980) was made for \$550,000 and earned nearly \$60 million. Saw (2004) cost \$1.2 million and grossed nearly \$104 million. Get Out (2017) cost \$4.5 million and returned \$255 million worldwide. These aren't mere anomalies, rather they reflect something structural about the genre of Horror movies. In this project I will be exploring two central questions using Tanya Shapiro's horror movie database (featured in the 2022 Tidy Tuesday challenge): Is a higher production budget associated with higher box office revenue? And how has the popularity of horror films shifted over the decades? Together, these questions address both the economics and the cultural momentum of one of cinema's most enduring forms.
+
+A note on sources: Wikipedia, cited below for general genre history, is used as an accessible overview. Its horror film article is consistent with peer-reviewed film scholarship and is treated as a starting point rather than a definitive source. Robin Wood's Hollywood from Vietnam to Reagan, the second citation, is a foundational academic work in horror film studies and is cited for a specific theoretical claim.
+
+## Loading the Horror Movies Data
+
+```{r}
+#| message: false
+#| warning: false
+
+horror <- read_csv("horror_movies.csv", show_col_types = FALSE)
+
+glimpse(horror)
+```
+
+```{r}
+#| message: false
+#| warning: false
+horror_financial <- horror %>%
+  filter(
+    !is.na(budget),
+    !is.na(revenue),
+    budget  > 10000,
+    revenue > 10000
+  )
+```
+
+After filtering to films with confirmed budget and revenue data, `r nrow(horror_financial)` films remain. The full dataset contains `r nrow(horror)` films, the vast majority of which do not have public financial records; which poses a known limitation of crowd-sourced movie databases.
+
+## Does a Larger Budget Associate with Higher Revenue?
+
+```{r}
+#| fig-alt: Scatter plot of production budget in millions of dollars on the x-axis against box office revenue in millions of dollars on the y-axis. Points are dark green and semi-transparent. There is a moderate upward trend but very wide spread at every budget level, showing that low-budget films can earn hundreds of millions and high-budget films can underperform.
+#| message: false
+#| warning: false
+
+ggplot(horror_financial, aes(x = budget / 1e6, y = revenue / 1e6)) +
+  geom_point(alpha = 0.4, color = "#1b7837") +
+  labs(
+    title    = "Horror Film Budget vs. Box Office Revenue",
+    subtitle = paste0("n = ", nrow(horror_financial), " films with confirmed financial data"),
+    x        = "Production Budget (millions USD)",
+    y        = "Box Office Revenue (millions USD)"
+  ) +
+  theme_minimal()
+```
+
+The scatter plot above shows every horror film in this dataset with confirmed budget and revenue. The correlation between the two variables is `r round(cor(horror_financial$revenue, horror_financial$budget), 2)` , which is moderate and positive, but far from a reliable rule. The highest-grossing film in the dataset, *It* (2017), earned \$701.8 million on a \$35 million budget. Meanwhile, *World War Z* (2013) spent \$200 million , which is the most of any film here and returned \$531.9 million, a solid absolute number but a much less impressive return relative to cost. The films with the best cost-to-return ratios were almost all low-budget productions whose terror came from story and atmosphere, not spectacle.
+
+## Performance by Budget Tier
+
+To get a clearer picture, films were grouped into three budget tiers and compared on revenue, audience rating, and platform popularity.
+
+```{r}
+#| message: false
+#| warning: false
+
+horror_financial <- horror_financial %>%
+  mutate(
+    budget_category = case_when(
+      budget < 10000000  ~ "Low (under $10M)",
+      budget < 50000000  ~ "Medium ($10M–$50M)",
+      budget >= 50000000 ~ "High ($50M+)"
+    ),
+    budget_category = factor(
+      budget_category,
+      levels = c("Low (under $10M)", "Medium ($10M–$50M)", "High ($50M+)")
+    )
+  )
+```
+
+```{r}
+#| fig-alt: This table shows average box office revenue in millions, average audience rating out of 10, and average popularity score broken down by budget tier — low under 10 million, medium 10 to 50 million, and high over 50 million dollars.
+#| message: false
+#| warning: false
+
+horror_financial %>%
+  filter(!is.na(budget_category)) %>%
+  group_by(budget_category) %>%
+  summarise(
+    Films          = n(),
+    Avg_Revenue_M  = round(mean(revenue,      na.rm = TRUE) / 1e6, 1),
+    Avg_Rating     = round(mean(vote_average, na.rm = TRUE), 2),
+    Avg_Popularity = round(mean(popularity,   na.rm = TRUE), 1),
+    .groups = "drop"
+  ) %>%
+  gt() %>%
+  tab_header(
+    title    = "Horror Film Performance by Budget Tier",
+    subtitle = "Films with confirmed budget and revenue only"
+  ) %>%
+  cols_label(
+    budget_category = "Budget Tier",
+    Films           = "Number of Films",
+    Avg_Revenue_M   = "Avg Revenue ($M)",
+    Avg_Rating      = "Avg Audience Rating",
+    Avg_Popularity  = "Avg Popularity Score"
+  )
+```
+
+The table above reveals a very interesting finding, that while high-budget films do generate the highest average revenue (\$152.5M), low-budget films receive audience ratings that are only slightly lower (5.77 vs. 6.16 out of 10). Horror audiences do not simply reward expensive films, clearly a well-crafted low-budget production can earn nearly the same critical reception as a studio blockbuster. This is consistent with the genre's history as a proving ground for independent filmmakers who understand that psychological tension costs nothing to write.
+
+## How Has Horror's Popularity Shifted Over Time?
+
+```{r}
+#| message: false
+#| warning: false
+
+popularity_trend <- horror %>%
+  mutate(year = as.integer(substr(release_date, 1, 4))) %>%
+  filter(!is.na(year), !is.na(popularity)) %>%
+  group_by(year) %>%
+  summarise(
+    avg_popularity = mean(popularity, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#| fig-alt: Line chart with year of release on the x-axis from 1950 to 2022 and average TMDB popularity score on the y-axis. The purple line is low and roughly flat across most of the 20th century, then rises sharply starting around 2020 and peaks in 2021 and 2022.
+#| message: false
+#| warning: false
+
+ggplot(popularity_trend, aes(x = year, y = avg_popularity)) +
+  geom_line(color = "#762a83", linewidth = 1) +
+  labs(
+    title    = "Average Popularity of Horror Films by Release Year",
+    subtitle = "TMDB engagement score; recent films score higher due to platform recency weighting",
+    x        = "Year of Release",
+    y        = "Average Popularity Score"
+  ) +
+  theme_minimal()
+```
+
+The line chart above shows average TMDB popularity scores for horror films by release year. The sharp rise from 2020 onward is striking but requires careful interpretation. TMDB's popularity metric is weighted toward recent platform activity, films released or rewatched recently score disproportionately higher regardless of their historical importance. The post-2019 spike most likely reflects two things at once: the genuine explosion of streaming-era horror content as platforms like Netflix and Shudder invested heavily in the genre, and the recency bias embedded in the scoring system itself. The broader trend is still meaningful, the scores are noticeably higher in the 2010s than in earlier decades, consistent with horror's expanding global audience[^2].
+
+## What Other Genres Appear Alongside Horror?
+
+Because many films in this dataset carry multiple genre tags, examining which genres most commonly appear alongside Horror reveals how the genre positions itself for different audiences.
+
+```{r}
+#| fig-alt: Horizontal bar chart with genre names on the y-axis and number of films on the x-axis. Bars are dark purple. Horror is the most frequent label at the top, followed by Thriller with around 7700 films, then Comedy, Drama, Mystery, Science Fiction, Fantasy, Action, Crime, and Animation.
+#| message: false
+#| warning: false
+
+horror %>%
+  separate_rows(genre_names, sep = ", ") %>%
+  count(genre_names, sort = TRUE) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(x = n, y = reorder(genre_names, n))) +
+  geom_col(fill = "#4d004b") +
+  labs(
+    title    = "Most Common Genre Labels in the Horror Database",
+    subtitle = "Top 10 by frequency; films may carry multiple genre tags",
+    x        = "Number of Films",
+    y        = "Genre"
+  ) +
+  theme_minimal()
+```
+
+Thriller is by far the most common co-genre, appearing alongside Horror in nearly 7,700 films. Both genres traffic in suspense and dread, differing primarily in whether the central threat is supernatural or human. The prominence of Comedy of nearly 5,000 films reflects a long tradition of horror-comedy hybrids, from "Abbott and Costello Meet Frankenstein" (1948) to "Shaun of the Dead" (2004), in which humor and horror amplify rather than cancel each other. The presence of Drama and Mystery reveals that modern horror rarely operates as a pure genre; it embeds its scares within emotional frameworks borrowed from neighboring forms, which may itself help explain its durable cross-demographic appeal.
+
+## Limitations
+
+The primarily limitation I came across is that the financial data used here covers only `r nrow(horror_financial)` of the `r nrow(horror)` films in the dataset. Films without public budget or revenue records, typically smaller independent and international productions are excluded entirely, which likely biases the financial analysis toward larger studio releases. Another limitation is that the TMDB popularity score is not a neutral measure of cultural impact. Its recency weighting means older films are systematically underrepresented in the popularity trend chart, and the sharp post-2020 rise cannot be interpreted as pure evidence of audience growth without accounting for this.
+
+## Conclusion
+
+This analysis finds that budget and revenue are positively but only moderately correlated in horror (r = `r round(cor(horror_financial$revenue, horror_financial$budget), 2)`). The most cost-efficient films in this dataset returned over 100 times their budgets, while some of the most expensive barely broke even. Horror's power lies in psychological tension rather than visual spectacle, something skilled filmmakers can achieve on almost any budget. Horror's popularity has also grown measurably in recent years, driven by streaming platform investment and genuine audience expansion, but the TMDB scoring methodology inflates recent scores and should be read with that caveat in mind. Ultimately, horror's staying power comes down to something simple: it costs very little to make an audience afraid, and audiences never stop wanting to be.
+
+## References
+
+[^1]: Wood, Robin. *Hollywood from Vietnam to Reagan — and Beyond*. Columbia University Press, 2003, pp. 69. Wood's central argument is that the horror genre dramatizes the return of whatever a culture has repressed — monstrosity as a reflection of social anxiety. This framework is widely cited in academic horror studies.
+
+[^2]: "Horror film." *Wikipedia*, Wikimedia Foundation. Available at: https://en.wikipedia.org/wiki/Horror_film. Used here as an accessible overview of horror's global audience growth. Wikipedia is a useful starting point but is not treated as a primary source; its specific claims about audience expansion are consistent with industry reporting and are supported by the article's own references.
