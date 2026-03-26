@@ -1,0 +1,30 @@
+---
+title: "Git for R Users"
+author: "Daulath Khan"
+format: html
+embed-resources: true
+---
+```{r}
+# Setup to use GIT package
+
+library(usethis)
+
+# Connect RStudio to your Github
+create_github_token()
+gitcreds::gitcreds_set()
+
+# Put a project into Github
+use_github()
+
+#Create a readme
+use_readme_md()
+```
+
+
+
+
+use_git_config(user.name = "Daulath Khan",
+user.email = "Khand@lakeforest.edu")
+
+Adding version control to an actual projectl tracks changes to a finite number of files.
+
